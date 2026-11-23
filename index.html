@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分形绘制台 · Mandelbrot / Julia</title>
+<style>
+  :root{
+    --bg:#060b13; --panel:#0b1420; --card:#0f1b2b;
+    --line:rgba(110,175,225,.16); --line2:rgba(110,175,225,.30);
+    --text:#cfe0ee; --dim:#7b93a9; --dim2:#5d7288;
+    --accent:#3fd0c0; --accent2:#5aa9f0;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    font-size:13px; line-height:1.55;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header{
+    flex:0 0 auto; padding:12px 20px; border-bottom:0.5px solid var(--line);
+    display:flex; align-items:baseline; gap:12px;
+  }
+  header h1{margin:0; font-size:15px; font-weight:500; letter-spacing:.02em}
+  header .sub{font-size:12px; color:var(--dim2)}
+  .main{flex:1 1 auto; display:flex; min-height:0}
+  .panel{
+    flex:0 0 288px; border-right:0.5px solid var(--line);
+    padding:14px 16px 24px; overflow-y:auto; background:var(--panel);
+  }
+  .panel::-webkit-scrollbar{width:8px}
+  .panel::-webkit-scrollbar-thumb{background:rgba(110,175,225,.18); border-radius:4px}
+  .group{margin-bottom:16px}
+  .group-title{
+    font-size:11px; color:var(--dim2); letter-spacing:.08em;
+    text-transform:uppercase; margin-bottom:8px;
+  }
+  .field{margin-bottom:10px}
+  .field-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px}
+  .field-head span{font-size:12px; color:var(--dim)}
+  .field-head input[type=number]{
+    width:96px; padding:2px 6px; font-size:12px; text-align:right;
+    background:var(--card); color:var(--text);
+    border:0.5px solid var(--line); border-radius:5px;
+    font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  .field-head input[type=number]:focus{outline:none; border-color:var(--accent)}
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:18px;
+    background:transparent; cursor:pointer; display:block;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:3px; background:rgba(110,175,225,.20); border-radius:2px;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:12px; height:12px; border-radius:50%;
+    background:var(--accent); margin-top:-4.5px; border:none;
+    box-shadow:0 0 0 3px rgba(63,208,192,.16);
+  }
+  input[type=range]::-moz-range-track{height:3px; background:rgba(110,175,225,.20); border-radius:2px}
+  input[type=range]::-moz-range-thumb{width:12px; height:12px; border-radius:50%; background:var(--accent); border:none}
+  select{
+    width:100%; padding:6px 8px; font-size:12px;
+    background:var(--card); color:var(--text);
+    border:0.5px solid var(--line); border-radius:6px; cursor:pointer;
+  }
+  select:focus{outline:none; border-color:var(--accent)}
+  .seg{display:flex; gap:6px}
+  .seg button{
+    flex:1; padding:6px 0; font-size:12px; cursor:pointer;
+    background:var(--card); color:var(--dim);
+    border:0.5px solid var(--line); border-radius:6px;
+    font-family:inherit; transition:all .12s;
+  }
+  .seg button:hover{color:var(--text); border-color:var(--line2)}
+  .seg button.on{background:rgba(63,208,192,.13); color:var(--accent); border-color:rgba(63,208,192,.45)}
+  .actions{margin-top:18px; padding-top:12px; border-top:0.5px solid var(--line)}
+  .btn{
+    width:100%; padding:9px 0; font-size:13px; font-family:inherit;
+    border-radius:7px; cursor:pointer; border:0.5px solid var(--line2);
+    background:var(--card); color:var(--text); transition:all .12s;
+  }
+  .btn:hover{border-color:var(--accent); color:var(--accent)}
+  .btn.primary{
+    background:linear-gradient(180deg, rgba(63,208,192,.22), rgba(63,208,192,.10));
+    border-color:rgba(63,208,192,.55); color:#8ff0e6; font-weight:500;
+  }
+  .btn.primary:hover{background:linear-gradient(180deg, rgba(63,208,192,.32), rgba(63,208,192,.16))}
+  .btn:disabled{opacity:.4; cursor:default; border-color:var(--line)}
+  .btn.small{padding:6px 0; font-size:12px; margin-top:2px}
+  .btn+.btn{margin-top:8px}
+  .stage{flex:1 1 auto; display:flex; flex-direction:column; min-width:0; min-height:0}
+  .canvas-wrap{
+    flex:1 1 auto; display:flex; align-items:center; justify-content:center;
+    padding:18px; min-height:0; overflow:hidden;
+  }
+  canvas{
+    max-width:100%; max-height:100%; display:block;
+    border-radius:6px; background:#04080f; cursor:grab;
+    box-shadow:0 0 0 0.5px rgba(110,175,225,.18);
+  }
+  canvas.dragging{cursor:grabbing}
+  .bar{
+    flex:0 0 auto; padding:10px 20px; border-top:0.5px solid var(--line);
+    display:flex; align-items:center; gap:16px; font-size:12px; color:var(--dim);
+  }
+  .track{flex:1 1 auto; height:3px; background:rgba(110,175,225,.16); border-radius:2px; overflow:hidden}
+  .fill{height:100%; width:0%; background:var(--accent); transition:width .08s linear}
+  .stat{font-variant-numeric:tabular-nums; white-space:nowrap}
+  .hint{font-size:11px; color:var(--dim2); margin-top:8px; line-height:1.5}
+  .julia-only{display:none}
+  body.is-julia .julia-only{display:block}
+  .toast{
+    position:fixed; left:50%; bottom:64px; transform:translateX(-50%) translateY(8px);
+    background:#0f2338; color:#9fe8dd; border:0.5px solid rgba(63,208,192,.4);
+    padding:7px 16px; border-radius:20px; font-size:12px;
+    opacity:0; pointer-events:none; transition:all .2s;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  @media (max-width: 820px){
+    .main{flex-direction:column}
+    .panel{flex:0 0 auto; max-height:44vh; border-right:none; border-bottom:0.5px solid var(--line)}
+    .actions{position:static; background:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>分形绘制台</h1>
+  <span class="sub">z → z² + c · 逐级细化渲染</span>
+</header>
+
+<div class="main">
+  <aside class="panel">
+    <div class="group">
+      <div class="group-title">预设</div>
+      <select id="preset">
+        <option value="full">Mandelbrot 全景</option>
+        <option value="spiral">Mandelbrot 螺旋谷</option>
+        <option value="seahorse">海马谷（密集纹理）</option>
+        <option value="julia1">Julia 四螺旋（c=0.285+0.01i）</option>
+        <option value="julia2">Julia 触手（c=-0.745+0.113i）</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <div class="group-title">分形类型</div>
+      <div class="seg" id="typeSeg">
+        <button data-type="mandelbrot" class="on">Mandelbrot</button>
+        <button data-type="julia">Julia</button>
+      </div>
+    </div>
+
+    <div class="group julia-only">
+      <div class="group-title">Julia 参数 c</div>
+      <div class="field">
+        <div class="field-head"><span>实部</span><input type="number" id="jr_n" step="0.001"></div>
+        <input type="range" id="jr_r" min="-1.6" max="1.6" step="0.001">
+      </div>
+      <div class="field">
+        <div class="field-head"><span>虚部</span><input type="number" id="ji_n" step="0.001"></div>
+        <input type="range" id="ji_r" min="-1.2" max="1.2" step="0.001">
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">视图</div>
+      <div class="field">
+        <div class="field-head"><span>中心 X</span><input type="number" id="cx_n" step="0.01"></div>
+        <input type="range" id="cx_r" min="-2.5" max="1" step="0.0001">
+      </div>
+      <div class="field">
+        <div class="field-head"><span>中心 Y</span><input type="number" id="cy_n" step="0.01"></div>
+        <input type="range" id="cy_r" min="-1.4" max="1.4" step="0.0001">
+      </div>
+      <div class="field">
+        <div class="field-head"><span>视野跨度</span><input type="number" id="span_n" step="0.0001"></div>
+        <input type="range" id="span_r" min="0" max="1000" step="1">
+      </div>
+      <button class="btn small" id="center">回到集合中心</button>
+    </div>
+
+    <div class="group">
+      <div class="group-title">渲染</div>
+      <div class="field">
+        <div class="field-head"><span>迭代上限</span><input type="number" id="iter_n" step="50"></div>
+        <input type="range" id="iter_r" min="100" max="20000" step="100">
+      </div>
+      <div class="field">
+        <div class="field-head"><span>边缘发光</span><input type="number" id="glow_n" step="0.1"></div>
+        <input type="range" id="glow_r" min="0" max="100" step="1">
+      </div>
+      <div class="field">
+        <div class="field-head"><span>渲染引擎</span></div>
+        <select id="engine">
+          <option value="auto" selected>自动（GPU 优先）</option>
+          <option value="gpu">强制 GPU</option>
+          <option value="cpu">强制 CPU</option>
+        </select>
+      </div>
+      <div class="field">
+        <div class="field-head"><span>输出分辨率</span></div>
+        <select id="res">
+          <option value="1200">1200 × 800</option>
+          <option value="1800" selected>1800 × 1200</option>
+          <option value="2400">2400 × 1600</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="draw">开始绘制</button>
+      <button class="btn" id="export" disabled>导出 PNG</button>
+      <div class="hint">滚轮缩放 · 拖拽平移 · 双击复位<br>参数改动即时出图，停手后自动细化<br>放大越深，请同步提高迭代上限</div>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div class="canvas-wrap"><canvas id="cv" width="1800" height="1200"></canvas></div>
+    <div class="bar">
+      <div class="track"><div class="fill" id="fill"></div></div>
+      <div class="stat" id="stat">就绪</div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- 调色板 ----------
+  var STOPS = [
+    [0.00,   4,   6,  18],
+    [0.15,  10,  24,  62],
+    [0.32,  16,  56, 108],
+    [0.48,  24, 100, 148],
+    [0.62,  46, 152, 176],
+    [0.74, 128, 204, 198],
+    [0.85, 242, 224, 176],
+    [0.93, 255, 248, 232],
+    [1.00, 255, 255, 255]
+  ];
+  var NLUT = 1024;
+  var LUT = (function(){
+    var a = new Uint32Array(NLUT), k;
+    for (var i = 0; i < NLUT; i++) {
+      var t = i / (NLUT - 1);
+      k = 0;
+      while (k < STOPS.length - 2 && t > STOPS[k + 1][0]) k++;
+      var p0 = STOPS[k], p1 = STOPS[k + 1];
+      var d = p1[0] - p0[0];
+      var f = d <= 0 ? 0 : (t - p0[0]) / d;
+      if (f < 0) f = 0; else if (f > 1) f = 1;
+      f = f * f * (3 - 2 * f);
+      a[i] = (Math.round(p0[1] + (p1[1] - p0[1]) * f) << 16) |
+             (Math.round(p0[2] + (p1[2] - p0[2]) * f) << 8) |
+              Math.round(p0[3] + (p1[3] - p0[3]) * f);
+    }
+    return a;
+  })();
+  var INSIDE = (4 << 16) | (6 << 8) | 18;
+
+  // ---------- 状态 ----------
+  var S = {
+    isJulia: false, jr: 0.285, ji: 0.01,
+    cx: -0.55, cy: 0, logSpan: Math.log(4.2),
+    maxIter: 800, glow: 1e-6, res: 1800, engine: 'auto'
+  };
+
+  var PRESETS = {
+    full:     { isJulia:false, cx:-0.55, cy:0, span:4.2,  iter:800 },
+    spiral:   { isJulia:false, cx:-0.7790, cy:0.1348, span:0.010, iter:9000 },
+    seahorse: { isJulia:false, cx:-0.743643887037151, cy:0.13182590420533, span:0.0012, iter:4000 },
+    julia1:   { isJulia:true,  cx:0, cy:0, span:3.4, iter:3000, jr:0.285, ji:0.01 },
+    julia2:   { isJulia:true,  cx:0, cy:0, span:3.2, iter:2000, jr:-0.74543, ji:0.11301 }
+  };
+
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d', { willReadFrequently: false });
+  var fillEl = document.getElementById('fill');
+  var statEl = document.getElementById('stat');
+  var drawBtn = document.getElementById('draw');
+  var exportBtn = document.getElementById('export');
+  var toastEl = document.getElementById('toast');
+
+  var job = null;
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ toastEl.classList.remove('show'); }, 1600);
+  }
+
+  // ---------- 参数绑定 ----------
+  function bindPair(rangeId, numId, opts){
+    var r = document.getElementById(rangeId);
+    var n = document.getElementById(numId);
+
+    function applyRange(){
+      // 注意：必须取 r.value，不能把 Event 对象传给 Number()
+      var v = Number(r.value);
+      if (!isFinite(v)) return;
+      var val = opts.fromRange(v);
+      opts.set(val);
+      n.value = opts.format(opts.get());
+    }
+    function applyNum(){
+      var v = Number(n.value);
+      if (!isFinite(v)) { n.value = opts.format(opts.get()); return; }
+      opts.set(v);
+      r.value = opts.toRange(opts.get());
+      n.value = opts.format(opts.get());
+    }
+
+    r.addEventListener('input', function(){
+      applyRange();
+      if (opts.onCommit) opts.onCommit();
+    });
+    r.addEventListener('change', function(){
+      applyRange();
+      if (opts.onCommit) opts.onCommit();
+    });
+    n.addEventListener('change', function(){
+      applyNum();
+      if (opts.onCommit) opts.onCommit();
+    });
+
+    return {
+      sync: function(){
+        var v = opts.get();
+        r.value = opts.toRange(v);
+        n.value = opts.format(v);
+      }
+    };
+  }
+
+  var STEP = 1e-4;
+  var fmt = function(v, d){ return Number(v).toFixed(d); };
+  // 小数精度随缩放深度自适应：放得越深需要越多位
+  function digitsFor(){
+    var span = Math.exp(S.logSpan);
+    return Math.max(2, Math.min(15, Math.ceil(-Math.log10(span)) + 3));
+  }
+
+  var pCx = bindPair('cx_r','cx_n',{
+    get: function(){ return S.cx; },
+    set: function(v){ S.cx = v; },
+    toRange: function(v){ return v; },
+    fromRange: function(v){ return v; },
+    format: function(v){ return Number(v).toFixed(digitsFor()); },
+    onCommit: function(){ requestQuickRender(); }
+  });
+  var pCy = bindPair('cy_r','cy_n',{
+    get: function(){ return S.cy; },
+    set: function(v){ S.cy = v; },
+    toRange: function(v){ return v; },
+    fromRange: function(v){ return v; },
+    format: function(v){ return Number(v).toFixed(digitsFor()); },
+    onCommit: function(){ requestQuickRender(); }
+  });
+
+  // span 用对数滑块：滑块右移 = 放大（span 变小）
+  var LOG_MIN = Math.log(1e-12), LOG_MAX = Math.log(5);
+  var pSpan = bindPair('span_r','span_n',{
+    get: function(){ return Math.exp(S.logSpan); },
+    set: function(v){ S.logSpan = Math.log(Math.max(1e-12, Math.min(5, v))); },
+    toRange: function(v){ return Math.round((LOG_MAX - Math.log(v)) / (LOG_MAX - LOG_MIN) * 1000); },
+    fromRange: function(t){ return Math.exp(LOG_MAX - (t / 1000) * (LOG_MAX - LOG_MIN)); },
+    format: function(v){ return v < 0.01 ? v.toExponential(2) : fmt(v, 4); },
+    onCommit: function(){ requestQuickRender(); }
+  });
+
+  var pIter = bindPair('iter_r','iter_n',{
+    get: function(){ return S.maxIter; },
+    set: function(v){ S.maxIter = Math.max(50, Math.min(50000, Math.round(v))); },
+    toRange: function(v){ return v; },
+    fromRange: function(v){ return v; },
+    format: function(v){ return String(Math.round(v)); },
+    onCommit: function(){ requestQuickRender(); }
+  });
+
+  // 发光：滑块 0..100 映射到 log10 指数 -8..-3
+  var pGlow = bindPair('glow_r','glow_n',{
+    get: function(){ return (Math.log10(S.glow) + 8) / 5 * 100; },
+    set: function(v){ S.glow = Math.pow(10, v / 100 * 5 - 8); },
+    toRange: function(v){ return v; },
+    fromRange: function(v){ return v; },
+    format: function(v){ return Number(v).toFixed(0); },
+    onCommit: function(){ requestQuickRender(); }
+  });
+
+  var pJr = bindPair('jr_r','jr_n',{
+    get: function(){ return S.jr; },
+    set: function(v){ S.jr = v; },
+    toRange: function(v){ return v; },
+    fromRange: function(v){ return v; },
+    format: function(v){ return fmt(v, 4); },
+    onCommit: function(){ requestQuickRender(); }
+  });
+  var pJi = bindPair('ji_r','ji_n',{
+    get: function(){ return S.ji; },
+    set: function(v){ S.ji = v; },
+    toRange: function(v){ return v; },
+    fromRange: function(v){ return v; },
+    format: function(v){ return fmt(v, 4); },
+    onCommit: function(){ requestQuickRender(); }
+  });
+
+  function syncAll(){
+    pCx.sync(); pCy.sync(); pSpan.sync(); pIter.sync(); pGlow.sync(); pJr.sync(); pJi.sync();
+    document.body.classList.toggle('is-julia', S.isJulia);
+    var segs = document.querySelectorAll('#typeSeg button');
+    for (var i = 0; i < segs.length; i++) {
+      segs[i].classList.toggle('on', (segs[i].dataset.type === 'julia') === S.isJulia);
+    }
+  }
+
+  // 拖动时只刷新位置相关控件，避免每帧遍历全部控件造成掉帧
+  function syncPosOnly(){
+    var d = digitsFor();
+    document.getElementById('cx_n').value = S.cx.toFixed(d);
+    document.getElementById('cy_n').value = S.cy.toFixed(d);
+    var rcx = document.getElementById('cx_r');
+    var rcy = document.getElementById('cy_r');
+    if (S.cx >= Number(rcx.min) && S.cx <= Number(rcx.max)) rcx.value = S.cx;
+    if (S.cy >= Number(rcy.min) && S.cy <= Number(rcy.max)) rcy.value = S.cy;
+  }
+
+  // 视野钳制：保证图像不会完全飞出画面
+  function clampView(){
+    var span = Math.exp(S.logSpan);
+    var hh = span * cv.height / cv.width;
+
+    if (S.isJulia) {
+      // Julia 集关于原点对称，缩到能看全时自动居中
+      if (span >= 3.4) { S.cx = 0; S.cy = 0; }
+      else {
+        S.cx = Math.max(-1.8, Math.min(1.8, S.cx));
+        S.cy = Math.max(-1.8, Math.min(1.8, S.cy));
+      }
+      return;
+    }
+
+    // Mandelbrot：缩到能看全时回到集合中心，否则保证与集合包围盒有足够重叠
+    if (span >= 4.0) { S.cx = -0.6; S.cy = 0; return; }
+    var bx0 = -2.05, bx1 = 0.55, by0 = -1.15, by1 = 1.15;
+    var hw = span / 2, hhh = hh / 2;
+    var ovx = Math.min(span, bx1 - bx0) * 0.35;
+    var ovy = Math.min(hh, by1 - by0) * 0.35;
+    if (S.cx + hw < bx0 + ovx) S.cx = bx0 + ovx - hw;
+    else if (S.cx - hw > bx1 - ovx) S.cx = bx1 - ovx + hw;
+    if (S.cy + hhh < by0 + ovy) S.cy = by0 + ovy - hhh;
+    else if (S.cy - hhh > by1 - ovy) S.cy = by1 - ovy + hhh;
+  }
+
+  // 居中/平移滑块量程随视野自适应：一次拖动最多移动 ±1.2 个视宽
+  function resetRanges(){
+    var span = Math.exp(S.logSpan);
+    var hw = span * 1.2;
+    var hh = span * (cv.height / cv.width) * 1.2;
+    var rcx = document.getElementById('cx_r');
+    var rcy = document.getElementById('cy_r');
+    rcx.min = S.cx - hw; rcx.max = S.cx + hw; rcx.step = (hw * 2) / 2000; rcx.value = S.cx;
+    rcy.min = S.cy - hh; rcy.max = S.cy + hh; rcy.step = (hh * 2) / 2000; rcy.value = S.cy;
+    var ncx = document.getElementById('cx_n');
+    var ncy = document.getElementById('cy_n');
+    ncx.step = (hw * 2) / 2000; ncy.step = (hh * 2) / 2000;
+  }
+
+  // ---------- 类型切换 ----------
+  document.getElementById('typeSeg').addEventListener('click', function(e){
+    var b = e.target.closest('button');
+    if (!b) return;
+    var next = b.dataset.type === 'julia';
+    if (next === S.isJulia) return;
+    S.isJulia = next;
+    // 两套坐标系不同，切换时直接回到各自的标准视图，避免沿用上一套的中心导致跑偏
+    if (S.isJulia) {
+      S.cx = 0; S.cy = 0; S.logSpan = Math.log(3.4);
+      if (Math.abs(S.jr) < 1e-9 && Math.abs(S.ji) < 1e-9) { S.jr = 0.285; S.ji = 0.01; }
+      if (S.maxIter < 1500) S.maxIter = 2000;
+    } else {
+      S.cx = -0.6; S.cy = 0; S.logSpan = Math.log(4.2);
+      if (S.maxIter > 2000) S.maxIter = 900;
+    }
+    startRender(false);
+  });
+
+  document.getElementById('center').addEventListener('click', function(){
+    S.cx = S.isJulia ? 0 : -0.6;
+    S.cy = 0;
+    startRender(false);
+  });
+
+  // ---------- 预设 ----------
+  document.getElementById('preset').addEventListener('change', function(e){
+    var p = PRESETS[e.target.value];
+    if (!p) return;
+    S.isJulia = p.isJulia;
+    S.cx = p.cx; S.cy = p.cy;
+    S.logSpan = Math.log(p.span);
+    S.maxIter = p.iter;
+    if (p.jr !== undefined) { S.jr = p.jr; S.ji = p.ji; }
+    syncAll();
+    startRender(false);
+  });
+
+  // ---------- 分辨率 ----------
+  document.getElementById('engine').addEventListener('change', function(e){
+    S.engine = e.target.value;
+    startRender(false);
+  });
+
+  document.getElementById('res').addEventListener('change', function(e){
+    S.res = Number(e.target.value);
+    cv.width = S.res;
+    cv.height = Math.round(S.res * 2 / 3);
+    snapMeta = null;   // 尺寸变了，旧快照作废
+    startRender(false);
+  });
+
+  // ---------- WebGL 加速器（GPU 路径）----------
+  // 与 CPU 路径完全相同的算法与调色板，只是把逐像素迭代搬到着色器里并行执行
+  var GL = null;
+  var GL_BROKEN = false;
+
+  var GL_VS = [
+    '#version 300 es',
+    'in vec2 aPos;',
+    'void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }'
+  ].join('\n');
+
+  var GL_FS = [
+    '#version 300 es',
+    'precision highp float;',
+    'uniform vec2 uRes;',
+    'uniform vec2 uCenter;',
+    'uniform float uSpan;',
+    'uniform float uAspect;',
+    'uniform int uMaxIter;',
+    'uniform int uIsJulia;',
+    'uniform vec2 uJuliaC;',
+    'uniform float uDMin;',
+    'uniform float uDMax;',
+    'uniform float uLogHi;',
+    'uniform float uInvR;',
+    'out vec4 outColor;',
+    'vec3 palette(float t){',
+    '  t = clamp(t, 0.0, 1.0);',
+    '  vec3 a; vec3 b; float k;',
+    '  if(t < 0.15){ k = t/0.15; a = vec3(0.01569,0.02353,0.07059); b = vec3(0.03922,0.09412,0.24314); }',
+    '  else if(t < 0.32){ k = (t-0.15)/0.17; a = vec3(0.03922,0.09412,0.24314); b = vec3(0.06275,0.21961,0.42353); }',
+    '  else if(t < 0.48){ k = (t-0.32)/0.16; a = vec3(0.06275,0.21961,0.42353); b = vec3(0.09412,0.39216,0.58039); }',
+    '  else if(t < 0.62){ k = (t-0.48)/0.14; a = vec3(0.09412,0.39216,0.58039); b = vec3(0.18039,0.59608,0.69020); }',
+    '  else if(t < 0.74){ k = (t-0.62)/0.12; a = vec3(0.18039,0.59608,0.69020); b = vec3(0.50196,0.80000,0.77647); }',
+    '  else if(t < 0.85){ k = (t-0.74)/0.11; a = vec3(0.50196,0.80000,0.77647); b = vec3(0.94902,0.87843,0.69020); }',
+    '  else if(t < 0.93){ k = (t-0.85)/0.08; a = vec3(0.94902,0.87843,0.69020); b = vec3(1.00000,0.97255,0.90980); }',
+    '  else { k = (t-0.93)/0.07; a = vec3(1.00000,0.97255,0.90980); b = vec3(1.0); }',
+    '  k = clamp(k, 0.0, 1.0);',
+    '  k = k*k*(3.0-2.0*k);',
+    '  return mix(a, b, k);',
+    '}',
+    'void main(){',
+    '  vec2 p = gl_FragCoord.xy / uRes;',
+    '  vec2 c = uCenter + vec2((p.x-0.5)*uSpan, (p.y-0.5)*uSpan*uAspect);',
+    '  vec2 z; vec2 cc; vec2 dz;',
+    '  if(uIsJulia == 1){ z = c; cc = uJuliaC; dz = vec2(1.0,0.0); }',
+    '  else { z = vec2(0.0); cc = c; dz = vec2(0.0); }',
+    '  int n = 0;',
+    '  for(int i=0;i<20000;i++){',
+    '    if(i >= uMaxIter) break;',
+    '    float zr2 = z.x*z.x, zi2 = z.y*z.y;',
+    '    if(zr2 + zi2 > 4.0) break;',
+    '    float t1 = z.x*dz.x - z.y*dz.y;',
+    '    float t2 = z.x*dz.y + z.y*dz.x;',
+    '    dz = 2.0*vec2(t1,t2) + (uIsJulia == 1 ? vec2(0.0) : vec2(1.0,0.0));',
+    '    z = vec2(zr2 - zi2, 2.0*z.x*z.y) + cc;',
+    '    n = i + 1;',
+    '  }',
+    '  if(n >= uMaxIter){ outColor = vec4(0.01569,0.02353,0.07059,1.0); return; }',
+    '  float m = length(z);',
+    '  float dm = length(dz);',
+    '  if(dm <= 0.0){ outColor = vec4(0.01569,0.02353,0.07059,1.0); return; }',
+    '  float d = m*log(m)/dm;',
+    '  d = clamp(d, uDMin, uDMax);',
+    '  float s = (uLogHi - log(d)) * uInvR;',
+    '  s = clamp(s, 0.0, 1.0);',
+    '  outColor = vec4(palette(s), 1.0);',
+    '}'
+  ].join('\n');
+
+  function initGL(W, H){
+    if (GL_BROKEN) return null;
+    if (GL && GL.w === W && GL.h === H) return GL;
+    if (GL) {
+      var oldExt = GL.gl.getExtension('WEBGL_lose_context');
+      if (oldExt) oldExt.loseContext();
+      GL = null;
+    }
+    var c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var gl = c.getContext('webgl2', {
+      antialias: false,
+      preserveDrawingBuffer: true,
+      powerPreference: 'high-performance'
+    });
+    if (!gl) { GL_BROKEN = true; return null; }
+
+    function compile(type, src){
+      var sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.warn('shader:', gl.getShaderInfoLog(sh));
+        return null;
+      }
+      return sh;
+    }
+    var vs = compile(gl.VERTEX_SHADER, GL_VS);
+    var fs = compile(gl.FRAGMENT_SHADER, GL_FS);
+    if (!vs || !fs) { GL_BROKEN = true; return null; }
+
+    var prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.warn('link:', gl.getProgramInfoLog(prog));
+      GL_BROKEN = true;
+      return null;
+    }
+
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    var aPos = gl.getAttribLocation(prog, 'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+    GL = {
+      canvas: c, gl: gl, prog: prog, w: W, h: H,
+      u: {
+        res: gl.getUniformLocation(prog, 'uRes'),
+        center: gl.getUniformLocation(prog, 'uCenter'),
+        span: gl.getUniformLocation(prog, 'uSpan'),
+        aspect: gl.getUniformLocation(prog, 'uAspect'),
+        maxIter: gl.getUniformLocation(prog, 'uMaxIter'),
+        isJulia: gl.getUniformLocation(prog, 'uIsJulia'),
+        juliaC: gl.getUniformLocation(prog, 'uJuliaC'),
+        dmin: gl.getUniformLocation(prog, 'uDMin'),
+        dmax: gl.getUniformLocation(prog, 'uDMax'),
+        logHi: gl.getUniformLocation(prog, 'uLogHi'),
+        invR: gl.getUniformLocation(prog, 'uInvR')
+      }
+    };
+
+    c.addEventListener('webglcontextlost', function(ev){
+      ev.preventDefault();
+      GL = null;              // 下次重建；不设 BROKEN，给驱动一次恢复机会
+    });
+    return GL;
+  }
+
+  function renderGPU(g){
+    var gl = g.gl;
+    var span = Math.exp(S.logSpan);
+    var dmax = span * 0.5;
+    var dmin = Math.max(dmax * S.glow, 1e-30);
+    var logHi = Math.log(dmax);
+    gl.viewport(0, 0, g.w, g.h);
+    gl.useProgram(g.prog);
+    gl.uniform2f(g.u.res, g.w, g.h);
+    gl.uniform2f(g.u.center, S.cx, S.cy);
+    gl.uniform1f(g.u.span, span);
+    gl.uniform1f(g.u.aspect, g.h / g.w);
+    gl.uniform1i(g.u.maxIter, Math.min(S.maxIter, 20000));
+    gl.uniform1i(g.u.isJulia, S.isJulia ? 1 : 0);
+    gl.uniform2f(g.u.juliaC, S.jr, S.ji);
+    gl.uniform1f(g.u.dmin, dmin);
+    gl.uniform1f(g.u.dmax, dmax);
+    gl.uniform1f(g.u.logHi, logHi);
+    gl.uniform1f(g.u.invR, 1.0 / (logHi - Math.log(dmin)));
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  // ---------- 渲染核心 ----------
+  var TILE = 64;
+  // 统一流水线：第一级 16×16 采样只需约 12ms，一帧内必定出图，
+  // 保证"参数一变就有画面"；后续级别在同一趟里自然细化。
+  var FULL_LEVELS = [16, 8, 4, 2, 1];
+  var LEVEL_NAME = { 16:'粗扫 16×16', 8:'细化 8×8', 4:'细化 4×4', 2:'半分辨率 2×2', 1:'全分辨率' };
+
+  // 复用像素缓冲：每次参数变动都要重画，反复分配 7MB 会有明显开销
+  var _buf = null;
+  function ensureBuffer(W, H){
+    if (_buf && _buf.width === W && _buf.height === H) return _buf;
+    _buf = ctx.createImageData(W, H);
+    var d = _buf.data;
+    for (var i = 0; i < d.length; i += 4) {
+      d[i] = 4; d[i+1] = 6; d[i+2] = 18; d[i+3] = 255;
+    }
+    return _buf;
+  }
+
+  function startRender(quick){
+    if (job) { job.cancelled = true; job = null; }
+    if (!quick) { clampView(); resetRanges(); syncAll(); }
+    var W = cv.width, H = cv.height;
+    var span = Math.exp(S.logSpan);
+
+    // GPU 用 float32：精度是否够，取决于"每像素跨度 / ulp"。
+    // ulp 随中心坐标量级变化，所以动态算，而不是写死一个阈值。
+    var mag = Math.max(Math.abs(S.cx), Math.abs(S.cy), 0.5);
+    var ulp32 = Math.pow(2, Math.floor(Math.log2(mag)) - 23);
+    var minSpanGPU = ulp32 * W * 3;    // 每像素至少跨 3 个 ulp，否则出现块状
+    var wantGPU = S.engine !== 'cpu' && S.maxIter <= 20000 &&
+                  (S.engine === 'gpu' || span > minSpanGPU);
+    if (wantGPU) {
+      var g = initGL(W, H);
+      if (g) {
+        var tg = performance.now();
+        renderGPU(g);
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(g.canvas, 0, 0);
+        var ms = performance.now() - tg;
+        fillEl.style.width = '100%';
+        statEl.textContent = '完成 · GPU · ' + W + '×' + H + ' · ' + ms.toFixed(0) + 'ms';
+        exportBtn.disabled = false;
+        captureSnapshot();
+        drawBtn.textContent = '开始绘制';
+        return;
+      }
+    }
+
+    var pix = span / W;
+
+    var jr = S.jr, ji = S.ji;
+    var isJulia = S.isJulia;
+    var maxIter = S.maxIter;
+    var derAdd = isJulia ? 0.0 : 1.0;
+    var dmax = span * 0.5;
+    var dmin = dmax * S.glow;
+    var logHi = Math.log(dmax);
+    var invR = 1.0 / (logHi - Math.log(dmin));
+
+    var img = ensureBuffer(W, H);
+    var data = img.data;
+
+    function shade(cr, ci){
+      var zr, zi, dzr, dzi;
+      if (isJulia) { zr = cr; zi = ci; dzr = 1; dzi = 0; }
+      else { zr = 0; zi = 0; dzr = 0; dzi = 0; }
+      var n = 0;
+      while (n < maxIter) {
+        var zr2 = zr * zr, zi2 = zi * zi;
+        if (zr2 + zi2 > 4.0) break;
+        var t1 = zr * dzr - zi * dzi;
+        var t2 = zr * dzi + zi * dzr;
+        dzr = 2 * t1 + derAdd;
+        dzi = 2 * t2;
+        if (isJulia) { zi = 2 * zr * zi + ji; zr = zr2 - zi2 + jr; }
+        else { zi = 2 * zr * zi + ci; zr = zr2 - zi2 + cr; }
+        n++;
+      }
+      if (n >= maxIter) return INSIDE;
+      var m2 = zr * zr + zi * zi;
+      var m = Math.sqrt(m2);
+      var dm = Math.sqrt(dzr * dzr + dzi * dzi);
+      if (dm <= 0) return INSIDE;
+      var d = m * Math.log(m) / dm;
+      if (d < dmin) d = dmin; else if (d > dmax) d = dmax;
+      var s = (logHi - Math.log(d)) * invR;
+      if (s < 0) s = 0; else if (s > 1) s = 1;
+      return LUT[(s * (NLUT - 1)) | 0];
+    }
+
+    var x0 = S.cx - W * 0.5 * pix;
+    var ytop = S.cy + H * 0.5 * pix;
+    var tilesX = Math.ceil(W / TILE);
+    var tilesY = Math.ceil(H / TILE);
+    var perLevel = tilesX * tilesY;
+    var levels = FULL_LEVELS;
+
+    job = {
+      W: W, H: H, img: img, data: data, shade: shade,
+      x0: x0, ytop: ytop, pix: pix, isJulia: isJulia, jr: jr, ji: ji,
+      tilesX: tilesX, tilesY: tilesY, perLevel: perLevel,
+      levels: levels, totalUnits: perLevel * levels.length, isFull: !quick,
+      li: 0, tx: 0, ty: 0, doneUnits: 0, t0: performance.now(), cancelled: false
+    };
+
+    if (!quick) drawBtn.textContent = '停止绘制';
+    exportBtn.disabled = true;
+    requestAnimationFrame(frame);
+  }
+
+  function renderTile(job, tx, ty, step){
+    var W = job.W, H = job.H, data = job.data, pix = job.pix;
+    var x0 = tx * TILE, y0 = ty * TILE;
+    var x1 = Math.min(x0 + TILE, W), y1 = Math.min(y0 + TILE, H);
+    var shade = job.shade;
+    var r, c, yy, xx, o, col;
+
+    for (var y = y0; y < y1; y += step) {
+      var sy = y + step * 0.5;
+      var ci = job.ytop - sy * pix;
+      var yEnd = Math.min(y + step, y1);
+      for (var x = x0; x < x1; x += step) {
+        var sx = x + step * 0.5;
+        var cr = job.x0 + sx * pix;
+        col = shade(cr, ci);
+        r = (col >> 16) & 255; c = (col >> 8) & 255;
+        var b = col & 255;
+        var xEnd = Math.min(x + step, x1);
+        for (yy = y; yy < yEnd; yy++) {
+          o = (yy * W + x) * 4;
+          for (xx = x; xx < xEnd; xx++) {
+            data[o] = r; data[o+1] = c; data[o+2] = b; data[o+3] = 255;
+            o += 4;
+          }
+        }
+      }
+    }
+  }
+
+  function frame(){
+    if (!job || job.cancelled) return;
+    var isFull = job.isFull;
+    // 预览级必须在少数几帧内成图，否则拖动时会看到"慢慢铺满"而非即时反馈
+    var budget = isFull ? 13 : 26;
+    var maxTiles = isFull ? 24 : 100000;
+    var t0 = performance.now();
+    var tilesThisFrame = 0;
+
+    while (performance.now() - t0 < budget) {
+      if (job.li >= job.levels.length) {
+        ctx.putImageData(job.img, 0, 0);
+        finish();
+        return;
+      }
+      renderTile(job, job.tx, job.ty, job.levels[job.li]);
+      job.doneUnits++;
+      job.tx++;
+      if (job.tx >= job.tilesX) { job.tx = 0; job.ty++; }
+      if (job.ty >= job.tilesY) { job.ty = 0; job.li++; }
+      if (++tilesThisFrame >= maxTiles) break;
+    }
+
+    // 每帧只提交一次整幅，比逐块提交快得多
+    ctx.putImageData(job.img, 0, 0);
+
+    if (job.li < job.levels.length) {
+      var pct = Math.min(99, job.doneUnits / job.totalUnits * 100);
+      fillEl.style.width = pct.toFixed(1) + '%';
+      var el = (performance.now() - job.t0) / 1000;
+      var lvName = LEVEL_NAME[job.levels[job.li]] || '渲染';
+      statEl.textContent = (job.isFull ? '' : '预览 · ') + lvName + ' · ' + pct.toFixed(0) + '% · ' + el.toFixed(1) + 's';
+    } else {
+      finish();
+      return;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function finish(){
+    var el = (performance.now() - job.t0) / 1000;
+    fillEl.style.width = '100%';
+    statEl.textContent = '完成 · ' + cv.width + '×' + cv.height + ' · ' + el.toFixed(1) + 's';
+    exportBtn.disabled = false;
+    // 每一趟都刷新缓冲：连续放大时缓冲始终贴近当前视野，
+    // 不会一直拉伸那张早就过时的全景图
+    captureSnapshot();
+    drawBtn.textContent = '开始绘制';
+    job = null;
+  }
+
+  // ---------- 过渡快照：拖动/缩放时用上一张成品图做几何变换 ----------
+  var snap = document.createElement('canvas');
+  var snapMeta = null;
+
+  function captureSnapshot(){
+    if (!cv.width || !cv.height) return;
+    snap.width = cv.width;
+    snap.height = cv.height;
+    snap.getContext('2d').drawImage(cv, 0, 0);
+    snapMeta = { cx: S.cx, cy: S.cy, span: Math.exp(S.logSpan) };
+  }
+
+  function drawSnapshot(){
+    if (!snapMeta || !snap.width) return false;
+    var span = Math.exp(S.logSpan);
+    var ss = snapMeta.span;
+    var aspect = cv.height / cv.width;
+    var hh = span * aspect;
+    var shh = ss * aspect;
+    var dx = ((snapMeta.cx - ss / 2) - (S.cx - span / 2)) / span * cv.width;
+    var dy = ((S.cy + hh / 2) - (snapMeta.cy + shh / 2)) / hh * cv.height;
+    var dw = ss / span * cv.width;
+    var dh = shh / hh * cv.height;
+    // 放大超过 200 倍时，缓冲图里已经没有任何有效信息，
+    // 而且画布会把整张图拉成天文数字尺寸，直接跳过等预览渲染
+    if (cv.width / dw > 200) return false;
+    // 放大超过 2 倍时改用最近邻，避免双线性插值把画面糊成一团
+    ctx.imageSmoothingEnabled = (cv.width / dw) <= 2;
+    ctx.fillStyle = '#04080f';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(snap, 0, 0, snap.width, snap.height, dx, dy, dw, dh);
+    ctx.imageSmoothingEnabled = true;
+    return true;
+  }
+
+  // ---------- 渲染调度：参数一变就重启，先出马赛克预览，停手后细化 ----------
+  var startPending = false;
+  var fullTimer = null;
+
+  function requestQuickRender(){
+    if (startPending) return;
+    startPending = true;
+    requestAnimationFrame(function(){
+      startPending = false;
+      startRender(true);
+    });
+    scheduleFull();
+  }
+
+  function scheduleFull(){
+    clearTimeout(fullTimer);
+    fullTimer = setTimeout(function(){
+      fullTimer = null;
+      startRender(false);
+    }, 260);
+  }
+
+  drawBtn.addEventListener('click', function(){
+    if (job && job.isFull) {
+      job.cancelled = true;
+      job = null;
+      drawBtn.textContent = '开始绘制';
+      fillEl.style.width = '0%';
+      statEl.textContent = '已停止';
+      return;
+    }
+    if (job) { job.cancelled = true; job = null; }
+    startRender(false);
+  });
+
+  // ---------- 交互：滚轮缩放 / 拖拽平移 ----------
+  var drag = null;
+
+  function viewSpan(){ return Math.exp(S.logSpan); }
+
+  cv.addEventListener('wheel', function(e){
+    e.preventDefault();
+    if (job) { job.cancelled = true; job = null; }
+    captureSnapshot();       // 先把当前画面存成缓冲（此时参数还没变）
+    var rect = cv.getBoundingClientRect();
+    var mx = (e.clientX - rect.left) / rect.width;
+    var my = (e.clientY - rect.top) / rect.height;
+    var span = viewSpan();
+    var hh = span * cv.height / cv.width;
+    var cr = S.cx - span * 0.5 + mx * span;
+    var ci = S.cy + hh * 0.5 - my * hh;
+
+    var f = Math.exp(-e.deltaY * 0.0012);
+    var ns = Math.max(1e-12, Math.min(5, span * f));
+    S.logSpan = Math.log(ns);
+    var nhh = ns * cv.height / cv.width;
+    S.cx = cr - (mx - 0.5) * ns;
+    S.cy = ci + (my - 0.5) * nhh;
+    resetRanges();           // 缩放后视野尺度变了，滑块量程要跟着重设
+    syncAll();
+    drawSnapshot();          // 先用上一张图做缩放过渡
+    requestQuickRender();    // 随后立刻出新视野的预览
+  }, { passive: false });
+
+  cv.addEventListener('mousedown', function(e){
+    if (job) { job.cancelled = true; job = null; drawBtn.textContent = '开始绘制'; }
+    captureSnapshot();       // 抓当前画面作为拖动缓冲
+    drag = { x: e.clientX, y: e.clientY, cx: S.cx, cy: S.cy };
+    cv.classList.add('dragging');
+  });
+
+  var movePending = null;
+  var moveRaf = 0;
+  window.addEventListener('mousemove', function(e){
+    if (!drag) return;
+    movePending = e;
+    if (moveRaf) return;
+    moveRaf = requestAnimationFrame(function(){
+      moveRaf = 0;
+      var ev = movePending;
+      if (!ev || !drag) return;
+      var rect = cv.getBoundingClientRect();
+      var span = viewSpan();
+      var dx = (ev.clientX - drag.x) / rect.width * span;
+      var dy = (ev.clientY - drag.y) / rect.height * span * (cv.height / cv.width);
+      S.cx = drag.cx - dx;
+      S.cy = drag.cy + dy;
+      syncPosOnly();
+      drawSnapshot();          // 拖动期间用缓冲图平移，不重算
+    });
+  });
+  window.addEventListener('mouseup', function(){
+    if (!drag) return;
+    drag = null;
+    if (moveRaf) { cancelAnimationFrame(moveRaf); moveRaf = 0; }
+    cv.classList.remove('dragging');
+    requestQuickRender();
+  });
+  cv.addEventListener('dblclick', function(){
+    var p = PRESETS.full;
+    S.cx = p.cx; S.cy = p.cy; S.logSpan = Math.log(p.span);
+    syncAll();
+    startRender(false);
+  });
+
+  // ---------- 导出 ----------
+  exportBtn.addEventListener('click', async function(){
+    if (job) return;
+    var name = 'fractal_' + (S.isJulia ? 'julia' : 'mandel') + '_' + cv.width + 'x' + cv.height + '.png';
+    var blob = await new Promise(function(res){ cv.toBlob(res, 'image/png'); });
+    if (!blob) { toast('导出失败'); return; }
+
+    if (window.showSaveFilePicker) {
+      try {
+        var handle = await window.showSaveFilePicker({
+          suggestedName: name,
+          types: [{ description: 'PNG 图片', accept: { 'image/png': ['.png'] } }]
+        });
+        var w = await handle.createWritable();
+        await w.write(blob);
+        await w.close();
+        toast('已保存到所选目录');
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+    }
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    toast('已下载到默认下载目录');
+  });
+
+  // ---------- 启动 ----------
+  syncAll();
+  startRender(false);
+})();
+</script>
+</body>
+</html>
